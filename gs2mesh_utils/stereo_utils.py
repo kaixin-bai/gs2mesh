@@ -112,15 +112,14 @@ class Stereo:
                     elif direction == 'RL':
                         image1_to_model = torch.flip(image2, dims=[3])
                         image2_to_model = torch.flip(image1, dims=[3])
-                    
+                    # prev_flow: Tensor{1,2,296,392},prev_flow看起来没有用;  flow_up: Tensor:{1,1,1184,1568}，和image的shape一致，负数
                     prev_flow, flow_up = self.model(image1_to_model, image2_to_model, iters=self.model_args.valid_iters, test_mode=True, flow_init=prev_flows[direction] if self.args.stereo_warm else None)
                     if direction == 'RL':
-                        prev_flow = torch.flip(prev_flow, dims=[3])
+                        prev_flow = torch.flip(prev_flow, dims=[3])  # 这行看起来没什么用
                         flow_up = torch.flip(flow_up, dims=[3])
                     flow_up = padder.unpad(flow_up).squeeze()
-                    
-                    prev_flows[direction] = prev_flow
-                    
+                    prev_flows[direction] = prev_flow  # 这行看起来没什么用
+                    # TODO: 检查以下代码生成的disparities的shape+type+正负
                     disparities[direction] = self.disparity_signs[self.model_name] * flow_up.detach().cpu().numpy().squeeze()
                     
                     output_directory = os.path.join(output_dir, f'out_{self.model_name}')
@@ -130,6 +129,7 @@ class Stereo:
                     plt.imsave(os.path.join(output_directory, f"disparity_{direction}.png"), disparities[direction], cmap='jet')
                         
                 occlusion_mask = self.get_occlusion_mask(disparities['LR'], disparities['RL'], self.args.stereo_occlusion_threshold)
+                # depth的形状是(1162, 1554)
                 depth = (left_camera['fx'] * baseline) / (disparities['LR'])
                 
                 np.save(os.path.join(output_directory, "occlusion_mask.npy"), occlusion_mask)

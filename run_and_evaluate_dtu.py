@@ -24,8 +24,8 @@ def run_DTU(args):
     #  Create output for evaluation
     # =============================================================================
     
-    Offical_DTU_Dataset = os.path.join(os.getcwd(), 'data', 'DTU', 'SampleSet', 'MVS_Data')
-    dataset_string, exp_path, csv_file = prepare_eval(args)
+    Offical_DTU_Dataset = os.path.join(os.getcwd(), 'data', 'DTU', 'SampleSet', 'MVS_Data')  # '/data/hdd1/kb/MyProjects/gs2mesh/data/DTU/SampleSet/MVS_Data'
+    dataset_string, exp_path, csv_file = prepare_eval(args)  # 'DTU_nw_iterations30000_DLNR_Middlebury_baseline7_0p', '/data/hdd1/kb/MyProjects/gs2mesh/evaluation/DTU/eval_output/DTU_nw_iterations30000_DLNR_Middlebury_baseline7_0p', '/data/hdd1/kb/MyProjects/gs2mesh/evaluation/DTU/eval_output/DTU_nw_iterations30000_DLNR_Middlebury_baseline7_0p/evaluation_results.csv'
 
     # =============================================================================
     #  Create meshes and evaluate
@@ -37,8 +37,8 @@ def run_DTU(args):
         #  Create mesh
         # =============================================================================
 
-        args.colmap_name = f'scan{scan_num}'
-        args.GS_port = GS_port_orig + scan_num
+        args.colmap_name = f'scan{scan_num}'  # 'scan24'
+        args.GS_port = GS_port_orig + scan_num  # 8080 + 24 = 8104
         print(args.colmap_name)
         print(args)
         ply_file = run_single(args)

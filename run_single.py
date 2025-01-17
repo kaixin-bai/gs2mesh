@@ -25,8 +25,8 @@ base_dir = os.path.abspath(os.getcwd())
 
 def run_single(args):
 
-    TSDF_voxel_length=args.TSDF_voxel/512
-    colmap_dir = os.path.abspath(os.path.join(base_dir,'data',args.dataset_name,args.colmap_name))
+    TSDF_voxel_length=args.TSDF_voxel/512  # 2 / 512 = 0.00390625
+    colmap_dir = os.path.abspath(os.path.join(base_dir,'data',args.dataset_name,args.colmap_name))  # '/data/hdd1/kb/MyProjects/gs2mesh/data/DTU/scan24'
     
     strings = create_strings(args)
     
@@ -34,7 +34,7 @@ def run_single(args):
     #  Extract frames from a video
     # =============================================================================
     
-    if not args.skip_video_extraction:
+    if not args.skip_video_extraction:  # True
         video_name = f'{args.colmap_name}.{args.video_extension}'
         extract_frames(os.path.join(colmap_dir, video_name), os.path.join(colmap_dir, 'images') , interval=args.video_interval)
 
@@ -42,7 +42,7 @@ def run_single(args):
     #  Create downsampled COLMAP directory
     # =============================================================================
     
-    if args.downsample > 1.0:
+    if args.downsample > 1.0:  # downsample = 1
         create_downsampled_colmap_dir(colmap_dir, args.downsample)
         args.colmap_name = f"{args.colmap_name}_downsample{args.downsample}"
         TSDF_voxel_length=args.TSDF_voxel/512
@@ -52,17 +52,24 @@ def run_single(args):
     #  Run COLMAP with unknown poses
     # =============================================================================
     
-    if not args.skip_colmap:
+    if not args.skip_colmap:  # skip_colmap = True
         run_colmap(colmap_dir, use_gpu=True) # If there's an error regarding SiftGPU not being supported, set use_gpu to False
 
     # =============================================================================
     #  Run Gaussian Splatting
     # =============================================================================
     
-    if not args.skip_GS:
+    # if not args.skip_GS:  # skip_GS = False
+    """
+    !!!BKX DEBUG!!!
+    """
+    if False:  # skip_GS = False
         try:
-            os.chdir(os.path.join(base_dir, 'third_party', 'gaussian-splatting'))
-            iterations_str = ' '.join([str(iteration) for iteration in args.GS_save_test_iterations])
+            os.chdir(os.path.join(base_dir, 'third_party', 'gaussian-splatting'))  # os.chdir的作用是改变当前工作目录，所有想读路径的文件操作将基于此目录
+            iterations_str = ' '.join([str(iteration) for iteration in args.GS_save_test_iterations])  # '7000 30000'
+            """
+            在此处运行3dgs训练
+            """
             os.system(f"python train.py -s {colmap_dir} --port {args.GS_port} --model_path {os.path.join(base_dir, 'splatting_output', strings['splatting'], args.colmap_name)} --iterations {args.GS_iterations} --test_iterations {iterations_str} --save_iterations {iterations_str}{' --white_background' if args.GS_white_background else ''}")
             os.chdir(base_dir)
         except:
@@ -70,23 +77,23 @@ def run_single(args):
             print("ERROR")
 
     # =============================================================================
-    #  Initialize renderer
+    #  Initialize renderer 初始化Renderer的目的是为了渲染left right图像
     # =============================================================================
     
     renderer = Renderer(base_dir, 
                         colmap_dir,
-                        strings['output_dir_root'],
+                        strings['output_dir_root'],  # '/data/hdd1/kb/MyProjects/gs2mesh/output/DTU_nw_iterations30000_DLNR_Middlebury_baseline7_0p/scan24'
                         args,
-                        dataset = strings['dataset'], 
-                        splatting = strings['splatting'],
-                        experiment_name = strings['experiment_name'],
-                        device=device)
+                        dataset = strings['dataset'],   # 'DTU_nw_iterations30000_DLNR_Middlebury_baseline7_0p', 这个文件夹在output/里
+                        splatting = strings['splatting'],  # 'DTU_nw_iterations30000'
+                        experiment_name = strings['experiment_name'],  # 'DTU_nw_iterations30000_DLNR_Middlebury_baseline7_0p'
+                        device=device)  # 'cuda'
 
     # =============================================================================
     #  Prepare renderer
     # =============================================================================
     
-    if not args.skip_rendering:
+    if not args.skip_rendering:  # skip_rendering: False
         renderer.prepare_renderer()
 
     # =============================================================================
