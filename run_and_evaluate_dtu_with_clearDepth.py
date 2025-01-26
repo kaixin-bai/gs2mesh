@@ -6,7 +6,9 @@ import os
 from pathlib import Path
 import subprocess
 
-from run_single import run_single
+# from run_single import run_single
+from run_single_with_clearDepth import run_single_clearDepth
+
 from gs2mesh_utils.argument_utils import ArgParser
 from gs2mesh_utils.eval_utils import prepare_eval, write_to_csv
 
@@ -25,7 +27,7 @@ def run_DTU(args):
     # =============================================================================
     
     Offical_DTU_Dataset = os.path.join(os.getcwd(), 'data', 'DTU', 'SampleSet', 'MVS_Data')  # '/data/hdd1/kb/MyProjects/gs2mesh/data/DTU/SampleSet/MVS_Data'
-    dataset_string, exp_path, csv_file = prepare_eval(args)  # 'DTU_nw_iterations30000_DLNR_Middlebury_baseline7_0p', '/data/hdd1/kb/MyProjects/gs2mesh/evaluation/DTU/eval_output/DTU_nw_iterations30000_DLNR_Middlebury_baseline7_0p', '/data/hdd1/kb/MyProjects/gs2mesh/evaluation/DTU/eval_output/DTU_nw_iterations30000_DLNR_Middlebury_baseline7_0p/evaluation_results.csv'
+    dataset_string, exp_path, csv_file = prepare_eval(args)  # 'DTU_nw_iterations30000_clearDepth_baseline7_0p', '/data/hdd1/kb/MyProjects/gs2mesh/evaluation/DTU/eval_output/DTU_nw_iterations30000_clearDepth_baseline7_0p', '/data/hdd1/kb/MyProjects/gs2mesh/evaluation/DTU/eval_output/DTU_nw_iterations30000_clearDepth_baseline7_0p/evaluation_results.csv'
 
     # =============================================================================
     #  Create meshes and evaluate
@@ -41,7 +43,7 @@ def run_DTU(args):
         args.GS_port = GS_port_orig + scan_num  # 8080 + 24 = 8104
         print(args.colmap_name)
         print(args)
-        ply_file = run_single(args)
+        ply_file = run_single_clearDepth(args)
         
         # =============================================================================
         #  Evaluate
@@ -68,13 +70,6 @@ def run_DTU(args):
 if __name__ == "__main__":
     parser = ArgParser('DTU')
     args = parser.parse_args()
-    # ================================
-    args.scans = [4]
-    args.skip_colmap = True
-    args.skip_GS = True
-    args.skip_rendering = False
-    args.skip_masking = True
-    args.TSDF_use_mask = False
-    # ================================
+    args.stereo_model = 'clearDepth'
     GS_port_orig = args.GS_port
     run_DTU(args)

@@ -12,19 +12,22 @@ from argparse import Namespace
 import matplotlib.pyplot as plt
 
 from gs2mesh_utils.transformation_utils import get_shading
-
+import logging
+# =============================================================================
+# import everything for clearDepth
+# =============================================================================
 import sys
 
-sys.path.append(os.path.abspath(os.path.join(__file__, '..', '..', 'third_party', 'DLNR')))
-from core.dlnr import DLNR
-from core.utils.utils import InputPadder as DLNR_InputPadder
+sys.path.append(os.path.abspath(os.path.join(__file__, '..', '..', 'third_party', 'clearDepth')))
+from core.raft_stereo import RAFTStereo
+from core.utils.utils import InputPadder
 
 
 # =============================================================================
 #  Class for stereo matching model
 # =============================================================================
 
-class Stereo:
+class ClearDepthStereo:
     def __init__(self, base_dir, renderer, args, device='cuda'):
         """
         Initialize the Stereo class.
@@ -38,32 +41,46 @@ class Stereo:
         self.base_dir = base_dir
         self.renderer = renderer
         self.args = args
-        self.model_name = self.args.stereo_model
+        self.model_name = 'transparent_finetuned_clearDepth'  # 'clearDepth_full'
         self.device = device
-        self.disparity_signs = {'DLNR_Middlebury': -1, 'DLNR_SceneFlow': -1}
+        # self.disparity_signs = {'DLNR_Middlebury': -1, 'DLNR_SceneFlow': -1}  # 这个干什么用的
+        self.disparity_signs = {'clearDepth_full': -1, 'transparent_finetuned_clearDepth': -1}  # 这个干什么用的
 
-        if "DLNR" in self.model_name:
-            DLNR_args = Namespace(corr_implementation='reg',
-                                  corr_levels=4,
-                                  corr_radius=4,
-                                  dataset='things',
-                                  hidden_dims=[128, 128, 128],
-                                  mixed_precision=True,
-                                  n_downsample=2,
-                                  n_gru_layers=3,
-                                  restore_ckpt=os.path.join(self.base_dir, 'third_party', 'DLNR', 'pretrained',
-                                                            f'{self.model_name}.pth'),
-                                  shared_backbone=False,
-                                  slow_fast_gru=False,
-                                  valid_iters=10)
-            DLNR_model = torch.nn.DataParallel(DLNR(DLNR_args), device_ids=[0])
-            DLNR_model.load_state_dict(torch.load(DLNR_args.restore_ckpt))
-            DLNR_model = DLNR_model.module
-            DLNR_model.to(self.device)
-            DLNR_model.eval()
-            self.model = DLNR_model
-            self.input_padder = DLNR_InputPadder
-            self.model_args = DLNR_args
+        if "clearDepth" in self.model_name:
+            clearDepth_args = Namespace(corr_implementation='alt',
+                                        corr_levels=4,
+                                        corr_radius=4,
+                                        # dataset='things',
+                                        hidden_dims=[128, 128, 128],
+                                        mixed_precision=True,
+                                        n_downsample=2,
+                                        n_gru_layers=3,
+                                        restore_ckpt=os.path.join(self.base_dir, 'third_party', 'clearDepth',
+                                                                  'pretrained',
+                                                                  f'{self.model_name}.pth'),
+                                        shared_backbone=False,
+                                        slow_fast_gru=False,
+                                        context_norm="batch",
+                                        model='we_tr',
+                                        valid_iters=32)
+            # == load model ==
+            clearDepth_model = torch.nn.DataParallel(RAFTStereo(clearDepth_args), device_ids=[0])
+            if clearDepth_args.restore_ckpt is not None:
+                assert clearDepth_args.restore_ckpt.endswith(".pth"), "Checkpoint file must end with .pth"
+                logging.info("Loading checkpoint...")
+                checkpoint = torch.load(clearDepth_args.restore_ckpt)
+                if isinstance(checkpoint, dict):
+                    if 'model_state_dict' in checkpoint and clearDepth_model is not None:
+                        clearDepth_model.load_state_dict(checkpoint['model_state_dict'], strict=True)
+                else:
+                    if clearDepth_model is not None:
+                        clearDepth_model.load_state_dict(checkpoint, strict=True)
+            clearDepth_model = clearDepth_model.module
+            clearDepth_model.to(self.device)
+            clearDepth_model.eval()
+            self.model = clearDepth_model
+            self.input_padder = InputPadder
+            self.model_args = clearDepth_args
         else:
             print("MODEL NOT SUPPORTED")
             return
@@ -79,6 +96,8 @@ class Stereo:
         torch.Tensor: Image tensor prepared for the model.
         """
         img = np.array(Image.open(imfile)).astype(np.uint8)
+        if img.shape[2] == 4:  # RGBA
+            img = img[:, :, :3]
         img = torch.from_numpy(img).permute(2, 0, 1).float()
         return img[None].to(self.device)
 
@@ -115,17 +134,16 @@ class Stereo:
                     elif direction == 'RL':
                         image1_to_model = torch.flip(image2, dims=[3])
                         image2_to_model = torch.flip(image1, dims=[3])
-
+                    # prev_flow: Tensor{1,2,296,392},prev_flow看起来没有用;  flow_up: Tensor:{1,1,1184,1568}，和image的shape一致，负数
                     prev_flow, flow_up = self.model(image1_to_model, image2_to_model, iters=self.model_args.valid_iters,
                                                     test_mode=True,
                                                     flow_init=prev_flows[direction] if self.args.stereo_warm else None)
                     if direction == 'RL':
-                        prev_flow = torch.flip(prev_flow, dims=[3])
+                        prev_flow = torch.flip(prev_flow, dims=[3])  # 这行看起来没什么用
                         flow_up = torch.flip(flow_up, dims=[3])
                     flow_up = padder.unpad(flow_up).squeeze()
-
-                    prev_flows[direction] = prev_flow
-
+                    prev_flows[direction] = prev_flow  # 这行看起来没什么用
+                    # TODO: 检查以下代码生成的disparities的shape+type+正负
                     disparities[direction] = self.disparity_signs[
                                                  self.model_name] * flow_up.detach().cpu().numpy().squeeze()
 
@@ -138,6 +156,7 @@ class Stereo:
 
                 occlusion_mask = self.get_occlusion_mask(disparities['LR'], disparities['RL'],
                                                          self.args.stereo_occlusion_threshold)
+                # depth的形状是(1162, 1554)
                 depth = (left_camera['fx'] * baseline) / (disparities['LR'])
 
                 np.save(os.path.join(output_directory, "occlusion_mask.npy"), occlusion_mask)
@@ -214,7 +233,8 @@ class Stereo:
                 images[path_name] = Image.open(path)
             else:
                 images[path_name] = Image.fromarray(np.random.randint(0, 255, (
-                self.renderer.left_cameras[0]['height'], self.renderer.left_cameras[0]['width'], 3), dtype=np.uint8))
+                    self.renderer.left_cameras[0]['height'], self.renderer.left_cameras[0]['width'], 3),
+                                                                      dtype=np.uint8))
 
         images['lr_img'] = Image.blend(images['left_img'], images['right_img'], alpha=0.5)
 

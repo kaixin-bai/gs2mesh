@@ -231,7 +231,55 @@ def run_colmap(colmap_dir, use_gpu=True):
     os.system(f"colmap image_undistorter --image_path {images_raw_dir} --input_path {sparse_dir} --output_path {colmap_dir} --output_type COLMAP")
     move_files_to_sparse_zero(colmap_dir)
     convert_to_txt(colmap_dir)
-    
+
+def run_colmap_DTU_EXTENSIONS(colmap_dir, use_gpu=True):
+    """
+    Run COLMAP on a directory of images with unknown poses to create a sparse model.
+
+    Parameters:
+    colmap_dir (str): Output directory for the COLMAP sparse model.
+    use_gpu (bool): Flag to use GPU for feature extraction and matching.
+
+    Returns:
+    None
+    """
+
+    images_dir = os.path.join(colmap_dir, 'images')
+    images_raw_dir = os.path.join(colmap_dir, 'images_raw')
+    database_dir = os.path.join(colmap_dir, 'database.db')
+    sparse_dir = os.path.join(colmap_dir, 'sparse')
+    sparse_zero_dir = os.path.join(sparse_dir, '0')
+
+    os.rename(images_dir, images_raw_dir)
+    os.system(f"rm -rf {os.path.join(images_raw_dir, '.ipynb_checkpoints')}")
+
+    # ==================================================================================================================
+    # os.system(f"colmap automatic_reconstructor --workspace_path {colmap_dir} --image_path {images_raw_dir} --camera_model PINHOLE --single_camera 1 --data_type video --quality extreme")  #  --camera_params '2883.18, 2883.18, 777.0, 581.0'
+    # os.makedirs(images_dir, exist_ok=True)
+    # for f in os.listdir(sparse_zero_dir):
+    #     shutil.move(os.path.join(sparse_zero_dir, f), sparse_dir)
+    # os.rmdir(sparse_zero_dir)
+    # os.system(f"colmap image_undistorter --image_path {images_raw_dir} --input_path {sparse_dir} --output_path {colmap_dir} --output_type COLMAP --blank_pixels 1 --max_image_size 1554")
+    # ==================================================================================================================
+
+    # ==================================================================================================================
+    os.system(f"colmap feature_extractor --database_path {database_dir} --image_path {images_raw_dir} --ImageReader.single_camera 1 --ImageReader.camera_model SIMPLE_RADIAL --SiftExtraction.use_gpu {'1' if use_gpu else '0'} --camera_mode 1")  # --ImageReader.camera_params '2883.18, 2883.18, 777.0, 581.0'
+    # os.system(f"colmap exhaustive_matcher --database_path {database_dir} --SiftMatching.use_gpu {'1' if use_gpu else '0'}")
+    os.system(f"colmap sequential_matcher --database_path {database_dir} --SiftMatching.use_gpu {'1' if use_gpu else '0'}")
+    if not os.path.exists(sparse_dir):
+        os.makedirs(sparse_dir)
+    os.system(f"colmap mapper --database_path {database_dir} --image_path {images_raw_dir} --output_path {sparse_dir} --Mapper.num_threads 16 --Mapper.init_min_tri_angle 4 --Mapper.multiple_models 0 --Mapper.extract_colors 0")
+    for f in os.listdir(sparse_zero_dir):
+        shutil.move(os.path.join(sparse_zero_dir, f), sparse_dir)
+    os.rmdir(sparse_zero_dir)
+    os.system(f"colmap image_undistorter --image_path {images_raw_dir} --input_path {sparse_dir} --output_path {colmap_dir} --output_type COLMAP --blank_pixels 1 --max_image_size 1554")
+    # ==================================================================================================================
+
+    move_files_to_sparse_zero(colmap_dir)
+    convert_to_txt(colmap_dir)
+
+
+
 def run_colmap_known_poses(colmap_dir, use_gpu=True, images_dir_name='images'):
     """
     Run COLMAP on a directory of images with known poses to create a sparse model.
